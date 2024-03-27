@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
+	"log"
 	"net/http"
 	"wb/backend/structs"
 )
@@ -19,6 +22,11 @@ func newHttpServer(db *goqu.Database) *httpServer {
 		db:     db,
 		router: gin.Default(),
 		lru:    New(100),
+	}
+
+	err := s.recoverLruFromPostgres()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	s.router.GET("/order", s.handleGetOrder)
@@ -49,6 +57,19 @@ func (s *httpServer) handleGetOrder(c *gin.Context) {
 		return
 	}
 
+	if val, ok := s.lru.Get(query.Uid); ok {
+		var ord structs.Orders
+
+		err := json.Unmarshal(val, &ord)
+		if err != nil {
+			_ = c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, ord)
+		return
+	}
+
 	found, err := s.db.From("orders").
 		InnerJoin(goqu.T("delivery"), goqu.Using("uid")).
 		InnerJoin(goqu.T("payment"), goqu.Using("uid")).
@@ -70,7 +91,7 @@ func (s *httpServer) handleGetOrder(c *gin.Context) {
 		return
 	}
 
-	var orders = structs.OrdersToHandle{
+	var orders = structs.Orders{
 		ID:                data.ID,
 		TrackNumber:       data.TrackNumber,
 		Entry:             data.Entry,
@@ -91,7 +112,7 @@ func (s *httpServer) handleGetOrder(c *gin.Context) {
 }
 
 func (s *httpServer) handlePostOrder(c *gin.Context) {
-	var data structs.OrdersToHandle
+	var data structs.Orders
 
 	err := c.ShouldBindJSON(&data)
 	if err != nil {
@@ -182,12 +203,73 @@ func (s *httpServer) handlePostOrder(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
+
+	marshalData, err := json.Marshal(data)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	s.lru.Set(data.ID, marshalData)
 }
 
-func getItemsFromPostgres(db *goqu.Database) []structs.Item {
+func getOrdersFromPostgres(db *goqu.Database) []structs.Orders {
+	var ords []structs.Ord
+
+	err := db.From("orders").
+		InnerJoin(goqu.T("delivery"), goqu.Using("uid")).
+		InnerJoin(goqu.T("payment"), goqu.Using("uid")).
+		ScanStructs(&ords)
+	if err != nil {
+		return nil
+	}
+
+	res := make([]structs.Orders, 0, len(ords))
+
+	for _, val := range ords {
+		var items []structs.Item
+		err = db.From("items").Where(goqu.Ex{"uid": val.ID}).ScanStructs(&items)
+		if err != nil {
+			return nil
+		}
+
+		var orders = structs.Orders{
+			ID:                val.ID,
+			TrackNumber:       val.TrackNumber,
+			Entry:             val.Entry,
+			Delivery:          val.Delivery,
+			Payments:          val.Payment,
+			Items:             items,
+			Locale:            val.Locale,
+			InternalSignature: val.InternalSignature,
+			CustomerID:        val.CustomerID,
+			DeliveryService:   val.DeliveryService,
+			ShardKey:          val.ShardKey,
+			SmID:              val.SmID,
+			DateCreated:       val.DateCreated,
+			OofShard:          val.OofShard,
+		}
+
+		res = append(res, orders)
+	}
+
+	return res
+}
+
+func (s *httpServer) recoverLruFromPostgres() error {
+	orders := getOrdersFromPostgres(s.db)
+	if orders == nil {
+		return fmt.Errorf("не удалось восстановить кэш и бд")
+	}
+
+	for _, val := range orders {
+		marshalOrder, err := json.Marshal(val)
+		if err != nil {
+			return err
+		}
+
+		s.lru.Set(val.ID, marshalOrder)
+	}
+
 	return nil
-}
-
-func recoverLruFromPostgres(db *goqu.Database) {
-	db.From("")
 }

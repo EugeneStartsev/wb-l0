@@ -1,6 +1,6 @@
 package structs
 
-type OrdersToHandle struct {
+type Orders struct {
 	ID                string     `json:"order_uid" db:"uid"`
 	TrackNumber       string     `json:"track_number,omitempty" db:"track_number"`
 	Entry             string     `json:"entry,omitempty" db:"entry"`
