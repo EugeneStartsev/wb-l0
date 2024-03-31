@@ -7,8 +7,11 @@ import (
 	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"
 	"log"
+	"os"
+	"os/signal"
 	"wb/backend/cache"
 	"wb/backend/nats/publisher"
+	subscriber "wb/backend/nats/subscriber"
 )
 
 func main() {
@@ -40,12 +43,25 @@ func main() {
 		log.Fatal(err)
 	}
 
-	publisher.StartPublisher()
+	pub := publisher.StartPublisher()
+
+	sub := subscriber.StartSubscriber(lru)
 
 	s := newHttpServer(db, lru)
 
-	err = s.run(fmt.Sprintf(":%d", *httpPort))
-	if err != nil {
-		log.Fatal(err)
-	}
+	go func() {
+		err = s.run(fmt.Sprintf(":%d", *httpPort))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	sigch := make(chan os.Signal, 1)
+	signal.Notify(sigch, os.Interrupt)
+
+	<-sigch
+
+	pub.Close()
+	sub.Unsubscribe()
+	sub.Close()
 }

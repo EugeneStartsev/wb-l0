@@ -4,13 +4,11 @@ import (
 	"encoding/json"
 	"github.com/nats-io/stan.go"
 	"log"
-	"os"
-	"os/signal"
 	"time"
 	"wb/backend/structs"
 )
 
-func StartPublisher() {
+func StartPublisher() stan.Conn {
 	var ord structs.Orders
 
 	sc, err := stan.Connect("test-cluster", "publisher")
@@ -34,11 +32,5 @@ func StartPublisher() {
 		}
 	}()
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt)
-
-	// Wait for the signal.
-	<-sigCh
-
-	sc.Close()
+	return sc
 }

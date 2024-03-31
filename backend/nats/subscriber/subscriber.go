@@ -8,7 +8,7 @@ import (
 	"wb/backend/structs"
 )
 
-func startSubscriber(lru *cache.LRU) {
+func StartSubscriber(lru *cache.LRU) stan.Subscription {
 	sc, err := stan.Connect("test-cluster", "subscriber")
 	if err != nil {
 		log.Fatalf("Subscriber: %s", err)
@@ -16,18 +16,14 @@ func startSubscriber(lru *cache.LRU) {
 
 	data := *new(structs.Orders)
 
-	sub, err := sc.Subscribe("JsonPipe", func(m *stan.Msg) {
+	sub, err := sc.Subscribe("Json", func(m *stan.Msg) {
 		err := json.Unmarshal(m.Data, &data)
 		if err != nil {
 			log.Println(err)
 		} else {
-			// добавление в кэш
 			lru.Set(data.ID, m.Data)
-			// добавление в бд
-			err = storage.SaveOrder(data)
-			if err != nil {
-				log.Println(err)
-			}
 		}
 	}, stan.DeliverAllAvailable())
+
+	return sub
 }

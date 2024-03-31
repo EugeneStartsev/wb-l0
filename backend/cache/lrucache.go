@@ -43,7 +43,7 @@ func (l *LRU) Get(key string) ([]byte, bool) {
 }
 
 func (l *LRU) Set(key string, value []byte) {
-	l.rw.RLock()
+	l.rw.Lock()
 	defer l.rw.Unlock()
 
 	if elem, isExist := l.items[key]; isExist == true {
