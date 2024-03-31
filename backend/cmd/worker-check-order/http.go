@@ -2,31 +2,25 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
-	"log"
 	"net/http"
+	"wb/backend/cache"
 	"wb/backend/structs"
 )
 
 type httpServer struct {
 	db     *goqu.Database
 	router *gin.Engine
-	lru    *LRU
+	lru    *cache.LRU
 }
 
-func newHttpServer(db *goqu.Database) *httpServer {
+func newHttpServer(db *goqu.Database, lru *cache.LRU) *httpServer {
 	s := httpServer{
 		db:     db,
 		router: gin.Default(),
-		lru:    New(100),
-	}
-
-	err := s.recoverLruFromPostgres()
-	if err != nil {
-		log.Fatal(err)
+		lru:    lru,
 	}
 
 	s.router.GET("/order", s.handleGetOrder)
@@ -211,65 +205,4 @@ func (s *httpServer) handlePostOrder(c *gin.Context) {
 	}
 
 	s.lru.Set(data.ID, marshalData)
-}
-
-func getOrdersFromPostgres(db *goqu.Database) []structs.Orders {
-	var ords []structs.Ord
-
-	err := db.From("orders").
-		InnerJoin(goqu.T("delivery"), goqu.Using("uid")).
-		InnerJoin(goqu.T("payment"), goqu.Using("uid")).
-		ScanStructs(&ords)
-	if err != nil {
-		return nil
-	}
-
-	res := make([]structs.Orders, 0, len(ords))
-
-	for _, val := range ords {
-		var items []structs.Item
-		err = db.From("items").Where(goqu.Ex{"uid": val.ID}).ScanStructs(&items)
-		if err != nil {
-			return nil
-		}
-
-		var orders = structs.Orders{
-			ID:                val.ID,
-			TrackNumber:       val.TrackNumber,
-			Entry:             val.Entry,
-			Delivery:          val.Delivery,
-			Payments:          val.Payment,
-			Items:             items,
-			Locale:            val.Locale,
-			InternalSignature: val.InternalSignature,
-			CustomerID:        val.CustomerID,
-			DeliveryService:   val.DeliveryService,
-			ShardKey:          val.ShardKey,
-			SmID:              val.SmID,
-			DateCreated:       val.DateCreated,
-			OofShard:          val.OofShard,
-		}
-
-		res = append(res, orders)
-	}
-
-	return res
-}
-
-func (s *httpServer) recoverLruFromPostgres() error {
-	orders := getOrdersFromPostgres(s.db)
-	if orders == nil {
-		return fmt.Errorf("не удалось восстановить кэш и бд")
-	}
-
-	for _, val := range orders {
-		marshalOrder, err := json.Marshal(val)
-		if err != nil {
-			return err
-		}
-
-		s.lru.Set(val.ID, marshalOrder)
-	}
-
-	return nil
 }

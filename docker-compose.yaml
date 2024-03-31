@@ -1,0 +1,23 @@
+version: "3.6"
+
+services:
+  postgres:
+    depends_on:
+      - nats
+    build: "backend/postgres"
+    environment:
+      POSTGRES_DB: "db"
+      POSTGRES_USER: "wb"
+      POSTGRES_PASSWORD: "admin"
+    ports:
+      - "5432:5432"
+    volumes:
+      - /backend/postgres/data:/var/lib/postgresql/data
+    restart: "always"
+
+  nats:
+    image: "nats-streaming:latest"
+    restart: "always"
+    ports:
+      - "4222:4222"
+      - "8222:8222"

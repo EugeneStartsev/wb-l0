@@ -7,6 +7,8 @@ import (
 	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"
 	"log"
+	"wb/backend/cache"
+	"wb/backend/nats/publisher"
 )
 
 func main() {
@@ -31,10 +33,16 @@ func main() {
 	}(postgres)
 
 	db := goqu.New("postgres", postgres)
+	lru := cache.New(100)
 
-	//создать горутину для jet-streaming
+	err = cache.RecoverLruFromPostgres(db, lru)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	s := newHttpServer(db)
+	publisher.StartPublisher()
+
+	s := newHttpServer(db, lru)
 
 	err = s.run(fmt.Sprintf(":%d", *httpPort))
 	if err != nil {
