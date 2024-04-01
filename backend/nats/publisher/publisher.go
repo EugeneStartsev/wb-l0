@@ -2,6 +2,7 @@ package publisher
 
 import (
 	"encoding/json"
+	"github.com/brianvoe/gofakeit"
 	"github.com/nats-io/stan.go"
 	"log"
 	"time"
@@ -19,6 +20,8 @@ func StartPublisher() stan.Conn {
 	go func() {
 		for {
 			time.Sleep(time.Second * 3)
+
+			gofakeit.Struct(&ord)
 
 			jsonToSend, err := json.Marshal(ord)
 			if err != nil {

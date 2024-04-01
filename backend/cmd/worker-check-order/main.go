@@ -1,10 +1,8 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"fmt"
-	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"
 	"log"
 	"os"
@@ -12,6 +10,7 @@ import (
 	"wb/backend/cache"
 	"wb/backend/nats/publisher"
 	subscriber "wb/backend/nats/subscriber"
+	"wb/backend/postgres"
 )
 
 func main() {
@@ -23,31 +22,23 @@ func main() {
 	httpPort := flag.Int("http-port", 4000, "HTTP API port")
 	flag.Parse()
 
-	postgres, err := sql.Open("postgres", *dbConn)
+	storage, err := postgres.NewDB(dbConn)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer func(postgres *sql.DB) {
-		err = postgres.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}(postgres)
-
-	db := goqu.New("postgres", postgres)
 	lru := cache.New(100)
 
-	err = cache.RecoverLruFromPostgres(db, lru)
+	err = cache.RecoverLruFromPostgres(storage, lru)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	pub := publisher.StartPublisher()
 
-	sub := subscriber.StartSubscriber(lru)
+	sub := subscriber.StartSubscriber(lru, storage)
 
-	s := newHttpServer(db, lru)
+	s := newHttpServer(storage, lru)
 
 	go func() {
 		err = s.run(fmt.Sprintf(":%d", *httpPort))

@@ -4,9 +4,8 @@ import (
 	"container/list"
 	"encoding/json"
 	"fmt"
-	"github.com/doug-martin/goqu/v9"
 	"sync"
-	"wb/backend/structs"
+	"wb/backend/postgres"
 )
 
 type order struct {
@@ -68,8 +67,8 @@ func (l *LRU) Clear() {
 	l.queue = list.New()
 }
 
-func RecoverLruFromPostgres(db *goqu.Database, lru *LRU) error {
-	orders := getOrdersFromPostgres(db)
+func RecoverLruFromPostgres(storage postgres.Storage, lru *LRU) error {
+	orders := storage.GetOrdersFromPostgres()
 	if orders == nil {
 		return fmt.Errorf("не удалось восстановить кэш и бд")
 	}
@@ -91,47 +90,4 @@ func (l *LRU) purge() {
 		deletedOrder := l.queue.Remove(elem).(*order)
 		delete(l.items, deletedOrder.key)
 	}
-}
-
-func getOrdersFromPostgres(db *goqu.Database) []structs.Orders {
-	var ords []structs.Ord
-
-	err := db.From("orders").
-		InnerJoin(goqu.T("delivery"), goqu.Using("uid")).
-		InnerJoin(goqu.T("payment"), goqu.Using("uid")).
-		ScanStructs(&ords)
-	if err != nil {
-		return nil
-	}
-
-	res := make([]structs.Orders, 0, len(ords))
-
-	for _, val := range ords {
-		var items []structs.Item
-		err = db.From("items").Where(goqu.Ex{"uid": val.ID}).ScanStructs(&items)
-		if err != nil {
-			return nil
-		}
-
-		var orders = structs.Orders{
-			ID:                val.ID,
-			TrackNumber:       val.TrackNumber,
-			Entry:             val.Entry,
-			Delivery:          val.Delivery,
-			Payments:          val.Payment,
-			Items:             items,
-			Locale:            val.Locale,
-			InternalSignature: val.InternalSignature,
-			CustomerID:        val.CustomerID,
-			DeliveryService:   val.DeliveryService,
-			ShardKey:          val.ShardKey,
-			SmID:              val.SmID,
-			DateCreated:       val.DateCreated,
-			OofShard:          val.OofShard,
-		}
-
-		res = append(res, orders)
-	}
-
-	return res
 }
