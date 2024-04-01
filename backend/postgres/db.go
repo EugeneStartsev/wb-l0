@@ -144,7 +144,7 @@ func (s *Storage) SaveOrder(data structs.Orders) error {
 	return nil
 }
 
-func (s *Storage) GetOrdersFromPostgres() []structs.Orders {
+func (s *Storage) GetOrdersFromPostgres() ([]structs.Orders, error) {
 	var ords []structs.Ord
 
 	err := s.db.From("orders").
@@ -152,7 +152,7 @@ func (s *Storage) GetOrdersFromPostgres() []structs.Orders {
 		InnerJoin(goqu.T("payment"), goqu.Using("uid")).
 		ScanStructs(&ords)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	res := make([]structs.Orders, 0, len(ords))
@@ -161,7 +161,7 @@ func (s *Storage) GetOrdersFromPostgres() []structs.Orders {
 		var items []structs.Item
 		err = s.db.From("items").Where(goqu.Ex{"uid": val.ID}).ScanStructs(&items)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 
 		var orders = structs.Orders{
@@ -184,5 +184,5 @@ func (s *Storage) GetOrdersFromPostgres() []structs.Orders {
 		res = append(res, orders)
 	}
 
-	return res
+	return res, nil
 }

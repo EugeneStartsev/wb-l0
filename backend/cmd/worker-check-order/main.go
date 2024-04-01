@@ -29,7 +29,7 @@ func main() {
 
 	lru := cache.New(100)
 
-	err = cache.RecoverLruFromPostgres(storage, lru)
+	err = lru.RecoverLruFromPostgres(storage)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func main() {
 		}
 	}()
 
-	sigch := make(chan os.Signal, 1)
+	sigch := make(chan os.Signal)
 	signal.Notify(sigch, os.Interrupt)
 
 	<-sigch

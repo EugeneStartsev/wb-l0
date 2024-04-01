@@ -86,5 +86,11 @@ func (s *httpServer) handlePostOrder(c *gin.Context) {
 		return
 	}
 
+	err = s.storage.SaveOrder(data)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
 	s.lru.Set(data.ID, marshalData)
 }

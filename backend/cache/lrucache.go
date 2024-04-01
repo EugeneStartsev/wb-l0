@@ -3,7 +3,6 @@ package cache
 import (
 	"container/list"
 	"encoding/json"
-	"fmt"
 	"sync"
 	"wb/backend/postgres"
 )
@@ -67,10 +66,10 @@ func (l *LRU) Clear() {
 	l.queue = list.New()
 }
 
-func RecoverLruFromPostgres(storage postgres.Storage, lru *LRU) error {
-	orders := storage.GetOrdersFromPostgres()
-	if orders == nil {
-		return fmt.Errorf("не удалось восстановить кэш и бд")
+func (l *LRU) RecoverLruFromPostgres(storage postgres.Storage) error {
+	orders, err := storage.GetOrdersFromPostgres()
+	if err != nil {
+		return err
 	}
 
 	for _, val := range orders {
@@ -79,7 +78,7 @@ func RecoverLruFromPostgres(storage postgres.Storage, lru *LRU) error {
 			return err
 		}
 
-		lru.Set(val.ID, marshalOrder)
+		l.Set(val.ID, marshalOrder)
 	}
 
 	return nil

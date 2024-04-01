@@ -2,7 +2,7 @@ package publisher
 
 import (
 	"encoding/json"
-	"github.com/brianvoe/gofakeit"
+	"github.com/brianvoe/gofakeit/v7"
 	"github.com/nats-io/stan.go"
 	"log"
 	"time"
@@ -14,14 +14,17 @@ func StartPublisher() stan.Conn {
 
 	sc, err := stan.Connect("test-cluster", "publisher")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Publisher: %s", err)
 	}
 
 	go func() {
 		for {
-			time.Sleep(time.Second * 3)
+			time.Sleep(time.Second * 10)
 
-			gofakeit.Struct(&ord)
+			err = gofakeit.Struct(&ord)
+			if err != nil {
+				log.Println(err)
+			}
 
 			jsonToSend, err := json.Marshal(ord)
 			if err != nil {
